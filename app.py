@@ -1,4 +1,5 @@
-from openai import OpenAI, OpenAIError
+from google import genai
+from google.genai import types
 import streamlit as st
 from dotenv import load_dotenv
 import os
@@ -38,16 +39,16 @@ USER_AVATAR = "👤"
 BOT_AVATAR = "🤖"
 
 try:
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
-        raise OpenAIError("Please provide OPENAI_API_KEY")
-    client = OpenAI(api_key=api_key)
-except OpenAIError as e:
+        raise Exception("Please provide GOOGLE_API_KEY")
+    client = genai.Client(api_key=api_key)
+except Exception as e:
     st.error(str(e))
 
 # Ensure openai_model is initialized in session state
 if "openai_model" not in st.session_state:
-    st.session_state["openai_model"] = "gpt-3.5-turbo"
+    st.session_state["openai_model"] = "gemini-2.0-flash-exp"
 
 # Load chat history from shelve file
 def load_chat_history():
@@ -132,26 +133,24 @@ with col2:
 
         PROMPT=f"You are Prompter, the world's best Prompt Engineer. I am using another GenAI tool, Tabler, that helps in generating a course outline for trainers and professionals for the automated course content generation for their courses. Your job is to strictly use the only following inputs: 1) Course Name: {course_name} 2) Target Audience Edu Level: {target_audience_edu_level} 3) Course Difficulty Level: {difficulty_level} 4) No. of Modules: {num_modules} 5) Course Duration: {course_duration} 6) Course Credit: {course_credit}.  to generate a prompt for Tabler so that it can produce the best possible outputs. The prompt that you generate must be comprehensive and strictly follow the above given inputs and also mention the given inputs in the prompt you generate. Moreover, it is your job to also identify if the course name is appropriate and not gibberish."
 
-        response = client.chat.completions.create(
+        response = client.models.generate_content(
             model=st.session_state["openai_model"],
-            messages=[
-                {"role": "system", "content": PROMPT},
-            ]
+            contents=PROMPT,
         )
-        generated_prompt = response.choices[0].message.content
+        generated_prompt = response.text
         # st.success("Prompt generated successfully!")
         # st.write(generated_prompt)
         
         
         with st.spinner("Generating course outline..."):
-            response = client.chat.completions.create(
+            response = client.models.generate_content(
                 model=st.session_state["openai_model"],
-                messages=[
-                    {"role": "system", "content": TABLER_PROMPT},
-                    {"role": "user", "content": generated_prompt},
-                ]
+                contents=[
+                    types.Part.from_text(TABLER_PROMPT),
+                    types.Part.from_text(generated_prompt),
+                ],
             )
-            Course_outline = response.choices[0].message.content
+            Course_outline = response.text
             st.success("Course outline generated successfully!")
 
             # with st.expander("Course Outline"):
@@ -182,14 +181,14 @@ with col2:
 
             if 'complete_course' in st.session_state and st.session_state['complete_course']:
                 with st.spinner("Generating complete course..."):
-                    response = client.chat.completions.create(
+                    response = client.models.generate_content(
                         model=st.session_state["openai_model"],
-                        messages=[
-                            {"role": "system", "content": DICTATOR_PROMPT},
-                            {"role": "user", "content": st.session_state['course_outline']},
-                        ]
+                        contents=[
+                            types.Part.from_text(DICTATOR_PROMPT),
+                            types.Part.from_text(st.session_state['course_outline']),
+                        ],
                     )
-                    Dict = response.choices[0].message.content
+                    Dict = response.text
                     # st.success("DICTator is here!")
                     # st.write(Dict)
 
@@ -220,14 +219,11 @@ with col2:
                             Make sure the content generated is easily convertible to a sensible using HTML Tags.
                             """
                             with st.spinner(f"Generating content for {module_name}, {lesson_name}"):
-                                response = client.chat.completions.create(
+                                response = client.models.generate_content(
                                     model=st.session_state["openai_model"],
-                                    messages=[
-                                        {"role": "system", "content": module_lesson_prompt},
-                                        # {"role": "user", "content": st.session_state['course_outline']},
-                                    ]
+                                    contents=module_lesson_prompt,
                                 )
-                                complete_course = response.choices[0].message.content
+                                complete_course = response.text
                                 st.success(f"Generated content for {module_name}, {lesson_name}")
 
                                 with st.expander("Click to view!"):
@@ -236,14 +232,11 @@ with col2:
                                 module_content +=  complete_course + "\n"*2
                         quizzy_prompt_final = QUIZZY_PROMPT + module_content
                         with st.spinner(f"Generating quiz questions for {module_name}"):
-                            res = client.chat.completions.create(
+                            res = client.models.generate_content(
                                 model=st.session_state["openai_model"],
-                                messages=[
-                                    {"role": "system", "content": quizzy_prompt_final},
-                                    # {"role": "user", "content": st.session_state['course_outline']},
-                                ]
+                                contents=quizzy_prompt_final,
                             )
-                            quiz_questions = res.choices[0].message.content
+                            quiz_questions = res.text
 
                             st.success(f"Quiz time!! Generated quiz questions for {module_name}")
                             with st.expander("Click to view!"):
@@ -272,24 +265,24 @@ with col2:
                     course outline:
                     {st.session_state['course_outline']}"""
 
-                    response = client.chat.completions.create(
+                    response = client.models.generate_content(
                         model=st.session_state["openai_model"],
-                        messages=[
-                            {"role": "system", "content": TABLER_PROMPT},
-                            {"role": "user", "content": Mod},
-                        ]
+                        contents=[
+                            types.Part.from_text(TABLER_PROMPT),
+                            types.Part.from_text(Mod),
+                        ],
                     )
-                    Mod_CO = response.choices[0].message.content
+                    Mod_CO = response.text
 
                     with st.spinner("Generating complete course with the specified modifications..."):
-                        response = client.chat.completions.create(
+                        response = client.models.generate_content(
                             model=st.session_state["openai_model"],
-                            messages=[
-                                {"role": "system", "content": DICTATOR_PROMPT},
-                                {"role": "user", "content": Mod_CO},
-                            ]
+                            contents=[
+                                types.Part.from_text(DICTATOR_PROMPT),
+                                types.Part.from_text(Mod_CO),
+                            ],
                         )
-                        Dict = response.choices[0].message.content
+                        Dict = response.text
                         # st.success("DICTator is here!")
                         # st.write(Dictt)
 
@@ -320,14 +313,11 @@ with col2:
                                 Make sure the content generated is easily convertible to a sensible using HTML Tags.
                                 """
                                 with st.spinner(f"Generating content for {module_name}, {lesson_name}"):
-                                    response = client.chat.completions.create(
+                                    response = client.models.generate_content(
                                         model=st.session_state["openai_model"],
-                                        messages=[
-                                            {"role": "system", "content": module_lesson_prompt},
-                                            # {"role": "user", "content": st.session_state['course_outline']},
-                                        ]
+                                        contents=module_lesson_prompt,
                                     )
-                                    complete_course = response.choices[0].message.content
+                                    complete_course = response.text
                                     st.success(f"Generated content for {module_name}, {lesson_name}")
 
                                     with st.expander("Click to view!"):
@@ -336,14 +326,11 @@ with col2:
                                     module_content +=  complete_course + "\n"*2
                             quizzy_prompt_final = QUIZZY_PROMPT + module_content
                             with st.spinner(f"Generating quiz questions for {module_name}"):
-                                res = client.chat.completions.create(
+                                res = client.models.generate_content(
                                     model=st.session_state["openai_model"],
-                                    messages=[
-                                        {"role": "system", "content": quizzy_prompt_final},
-                                        # {"role": "user", "content": st.session_state['course_outline']},
-                                    ]
+                                    contents=quizzy_prompt_final,
                                 )
-                                quiz_questions = res.choices[0].message.content
+                                quiz_questions = res.text
 
                                 st.success(f"Quiz time!! Generated quiz questions for {module_name}")
                                 with st.expander("Click to view!"):
